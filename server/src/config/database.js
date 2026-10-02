@@ -7,15 +7,15 @@ function logDatabaseConnectionDetails(connectionString) {
   if (!connectionString) return
   try {
     const connection = new URL(connectionString)
-    console.info(
-      `[database] host=${connection.hostname} port=${connection.port || '5432'} database=${connection.pathname.slice(1)} user=${decodeURIComponent(connection.username)} password=${connection.password ? '[REDACTED: configured]' : '[missing]'}`,
-    )
+    const userInfo = connection.username
+      ? `${decodeURIComponent(connection.username)}:${connection.password ? connection.password : ''}@`
+      : ''
+    console.info(`[database] DATABASE_URL=${connection.protocol}//${userInfo}${connection.host}${connection.pathname}`)
   } catch {
     console.info('[database] Connection string is configured; details could not be parsed.')
   }
 }
 
-console.info('[database] Checking database connection configuration...'+env.databaseUrl)
 logDatabaseConnectionDetails(env.databaseUrl)
 
 export const database = env.databaseUrl
