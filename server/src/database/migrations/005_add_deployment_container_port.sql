@@ -1,0 +1,1 @@
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS container_port INTEGER CHECK (container_port IS NULL OR container_port BETWEEN 31000 AND 65535);
