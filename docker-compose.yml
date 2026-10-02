@@ -3,9 +3,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-deployhub}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: deployhub
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: DeployHub2026StrongPass
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,9 +23,9 @@ services:
       - .env
     environment:
       PORT: 5000
-      CLIENT_URL: ${CLIENT_URL:-https://deployhub.prashant.in}
-      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-https://deployhub.prashant.in/api/auth/github/callback}
-      DEPLOYMENT_DOMAIN: ${DEPLOYMENT_DOMAIN:-deployhub.prashant.in}
+      CLIENT_URL: ${CLIENT_URL:-https://deployhub.prashantxd.in}
+      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-https://deployhub.prashantxd.in/api/auth/github/callback}
+      DEPLOYMENT_DOMAIN: ${DEPLOYMENT_DOMAIN:-deployhub.prashantxd.in}
       DEPLOYMENT_PROTOCOL: ${DEPLOYMENT_PROTOCOL:-https}
       DEPLOYMENT_DOCKER_NETWORK: deployhub_deployments
       DEPLOYMENT_NGINX_CONTAINER: deployhub-nginx
