@@ -129,7 +129,7 @@ Set the values below. Replace every `REPLACE_...` and `YOUR_...` value, and use 
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=REPLACE_WITH_FIRST_HEX_OUTPUT
 POSTGRES_DB=deployhub
-DATABASE_URL=postgresql://postgres:REPLACE_WITH_FIRST_HEX_OUTPUT@postgres:5432/deployhub
+DATABASE_URL=postgresql://postgres:REPLACE_WITH_FIRST_HEX_OUTPUT@localhost:5432/deployhub
 PORT=5000
 CLIENT_URL=https://deployhub.prashant.in
 GITHUB_CLIENT_ID=YOUR_GITHUB_OAUTH_CLIENT_ID
@@ -143,6 +143,8 @@ TLS_CERT_DIR=./certs
 ```
 
 Save in nano with `Ctrl+O`, Enter, then `Ctrl+X`. The `.env` file is ignored by Git. Do not commit it or paste its contents into chat or tickets.
+
+`DATABASE_URL` uses `localhost` in the shared file for running the API directly during local development. Docker Compose overrides it inside the server container to use the private `postgres` service hostname; do not change the `.env` value to `postgres` for this single-file setup.
 
 ## 8. Create the wildcard HTTPS certificate
 

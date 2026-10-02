@@ -181,7 +181,7 @@ Example:
 
 ```dotenv
 PORT=5000
-DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/deployhub
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/deployhub
 CLIENT_URL=https://deployhub.prashant.in
 GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID
 GITHUB_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET
@@ -191,6 +191,8 @@ DEPLOYMENT_DOMAIN=deployhub.prashant.in
 DEPLOYMENT_PROTOCOL=https
 DEPLOYMENT_ENCRYPTION_KEY=YOUR_64_CHAR_HEX_KEY
 ```
+
+The root `.env` keeps `localhost` for local API development. Docker Compose overrides the hostname to its private `postgres` service when running the server container.
 
 Notes:
 
