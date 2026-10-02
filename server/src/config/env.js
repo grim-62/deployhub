@@ -7,7 +7,6 @@ const port = Number(process.env.PORT || 5000)
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be a valid TCP port number.')
 }
-console.log(`Using port: ${port} , process.env.SESSION_SECRET = ${process.env.SESSION_SECRET}`)
 const sessionSecretConfigured = Boolean(process.env.SESSION_SECRET)
 if (sessionSecretConfigured && process.env.SESSION_SECRET.length < 32) {
   throw new Error('SESSION_SECRET must be at least 32 characters long.')
