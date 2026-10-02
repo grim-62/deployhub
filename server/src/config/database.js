@@ -15,6 +15,7 @@ function logDatabaseConnectionDetails(connectionString) {
   }
 }
 
+console.info('[database] Checking database connection configuration...'+env.databaseUrl)
 logDatabaseConnectionDetails(env.databaseUrl)
 
 export const database = env.databaseUrl
