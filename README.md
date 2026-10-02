@@ -14,11 +14,11 @@ Install dependencies and start the API and client:
 npm install
 npm --prefix client install
 npm --prefix server install
-cp server/.env.example server/.env
+cp .env.example .env
 npm run dev
 ```
 
-Set `DATABASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`, and a random `SESSION_SECRET` of at least 32 characters in `server/.env`. Local callback URL: `http://localhost:5000/api/auth/github/callback`. The Vite app runs at `http://localhost:5173`; the API runs at `http://localhost:5000`.
+Use the repository-root `.env` as the only environment file for the API, Vite, and Docker Compose. Vite reads only the public `VITE_` settings from it; never put secrets in `VITE_` variables. `VITE_API_URL=/api` works locally through the Vite proxy and in production through Nginx. For local development, leave `NODE_ENV` unset, use a local PostgreSQL URL such as `postgresql://postgres:YOUR_PASSWORD@localhost:5432/deployhub`, set `CLIENT_URL=http://localhost:5173`, and use `GITHUB_CALLBACK_URL=http://localhost:5000/api/auth/github/callback`. Fill in your GitHub OAuth credentials and a `SESSION_SECRET` of at least 32 characters. Docker Compose sets `NODE_ENV=production` for the server container. For EC2, use the production values described in [AWS_DEPLOYMENT.md](AWS_DEPLOYMENT.md). The Vite app runs at `http://localhost:5173`; the API runs at `http://localhost:5000`.
 
 ## EC2 Deployment
 

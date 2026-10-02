@@ -126,7 +126,6 @@ nano .env
 Set the values below. Replace every `REPLACE_...` and `YOUR_...` value, and use the same generated database password in both places:
 
 ```dotenv
-NODE_ENV=production
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=REPLACE_WITH_FIRST_HEX_OUTPUT
 POSTGRES_DB=deployhub

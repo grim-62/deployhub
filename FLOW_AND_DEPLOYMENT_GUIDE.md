@@ -180,7 +180,6 @@ You need:
 Example:
 
 ```dotenv
-NODE_ENV=production
 PORT=5000
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/deployhub
 CLIENT_URL=https://deployhub.prashant.in
