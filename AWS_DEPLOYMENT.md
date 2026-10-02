@@ -2,7 +2,7 @@
 
 Follow this guide from top to bottom to publish the complete DeployHub repository to GitHub, create an Ubuntu EC2 server, and start the app with Docker Compose. The client, API, PostgreSQL, and Nginx are deployed together from this one repository.
 
-Example domain used below: `deployhub.prashant.in`. Replace it everywhere if your actual domain is different.
+This guide uses your Hostinger domain `prashantxd.in`, with DeployHub at `deployhub.prashantxd.in` and project apps at hosts such as `my-app-12.deployhub.prashantxd.in`.
 
 ## 1. Push the project to GitHub
 
@@ -68,21 +68,21 @@ Use `sudo docker compose` for the commands below. Adding `ubuntu` to the Docker 
 
 ## 4. Configure DNS
 
-At the DNS provider for your domain, point both the DeployHub host and the project subdomains at the EC2 Elastic IP. For `deployhub.prashant.in`, add:
+In Hostinger hPanel, open **Domains > prashantxd.in > DNS / Nameservers > DNS records**. Add these records, replacing `EC2_ELASTIC_IP` with the Elastic IP attached to your EC2 instance:
 
 | Name | Type | Value |
 | --- | --- | --- |
 | `deployhub` | A | `EC2_ELASTIC_IP` |
 | `*.deployhub` | A | `EC2_ELASTIC_IP` |
 
-The wildcard record allows project URLs under `*.deployhub.prashant.in`. Wait until these return the Elastic IP before continuing:
+These records route DeployHub and project subdomains to EC2. Leave existing MX, TXT, and other DNS records unchanged. Wait until both names resolve to the Elastic IP before continuing:
 
 ```sh
-dig +short deployhub.prashant.in
-dig +short test.deployhub.prashant.in
+dig +short deployhub.prashantxd.in
+dig +short test.deployhub.prashantxd.in
 ```
 
-If your DNS provider uses a different record-name format, enter the equivalent fully qualified names `deployhub.prashant.in` and `*.deployhub.prashant.in`.
+In Hostinger's record form, enter host names `deployhub` and `*.deployhub`; Hostinger appends the zone `prashantxd.in`. Do not change the apex `prashantxd.in` record unless you also want to move your root website.
 
 ## 5. Clone the GitHub repository on EC2
 
@@ -99,8 +99,8 @@ Use the HTTPS or SSH clone URL shown by GitHub. For a private repository, config
 
 Before starting the app, create an OAuth App in GitHub under **Settings > Developer settings > OAuth Apps > New OAuth App**:
 
-- Homepage URL: `https://deployhub.prashant.in`
-- Authorization callback URL: `https://deployhub.prashant.in/api/auth/github/callback`
+- Homepage URL: `https://deployhub.prashantxd.in`
+- Authorization callback URL: `https://deployhub.prashantxd.in/api/auth/github/callback`
 
 Keep the generated client ID and secret available for the `.env` setup below. DeployHub requests the `repo` scope to access repositories allowed by the signing-in GitHub account.
 
@@ -131,12 +131,12 @@ POSTGRES_PASSWORD=REPLACE_WITH_FIRST_HEX_OUTPUT
 POSTGRES_DB=deployhub
 DATABASE_URL=postgresql://postgres:REPLACE_WITH_FIRST_HEX_OUTPUT@localhost:5432/deployhub
 PORT=5000
-CLIENT_URL=https://deployhub.prashant.in
+CLIENT_URL=https://deployhub.prashantxd.in
 GITHUB_CLIENT_ID=YOUR_GITHUB_OAUTH_CLIENT_ID
 GITHUB_CLIENT_SECRET=YOUR_GITHUB_OAUTH_CLIENT_SECRET
-GITHUB_CALLBACK_URL=https://deployhub.prashant.in/api/auth/github/callback
+GITHUB_CALLBACK_URL=https://deployhub.prashantxd.in/api/auth/github/callback
 SESSION_SECRET=REPLACE_WITH_SECOND_HEX_OUTPUT
-DEPLOYMENT_DOMAIN=deployhub.prashant.in
+DEPLOYMENT_DOMAIN=deployhub.prashantxd.in
 DEPLOYMENT_PROTOCOL=https
 DEPLOYMENT_ENCRYPTION_KEY=REPLACE_WITH_THIRD_HEX_OUTPUT
 TLS_CERT_DIR=./certs
@@ -152,7 +152,7 @@ The certificate must cover the main DeployHub host and its project subdomains. C
 
 ```sh
 mkdir -p certs
-DOMAIN=deployhub.prashant.in
+DOMAIN=deployhub.prashantxd.in
 sudo certbot certonly --manual --preferred-challenges dns \
   --config-dir "$PWD/certs" \
   --work-dir "$PWD/certs/work" \
@@ -163,8 +163,8 @@ sudo certbot certonly --manual --preferred-challenges dns \
 When prompted, create the requested `_acme-challenge` TXT record and wait for it to propagate before pressing Enter in Certbot. The expected files are:
 
 ```text
-certs/live/deployhub.prashant.in/fullchain.pem
-certs/live/deployhub.prashant.in/privkey.pem
+certs/live/deployhub.prashantxd.in/fullchain.pem
+certs/live/deployhub.prashantxd.in/privkey.pem
 ```
 
 The manual DNS certificate does not renew automatically. Repeat the DNS-01 process before expiry and restart Nginx after renewing. Keep `certs/` private; it is Git-ignored.
@@ -185,7 +185,7 @@ Check logs if a service is not healthy:
 sudo docker compose logs --tail=100 postgres server client nginx
 ```
 
-When the services are up, open `https://deployhub.prashant.in`, sign in with GitHub, select a repository, choose Frontend or Backend, configure the branch and environment variables, and deploy. The app shows deployment status/logs, then opens the project detail page when deployment becomes live.
+When the services are up, open `https://deployhub.prashantxd.in`, sign in with GitHub, select a repository, choose Frontend or Backend, configure the branch and environment variables, and deploy. The app shows deployment status/logs, then opens the project detail page when deployment becomes live. Project URLs use `https://PROJECT-NAME-ID.deployhub.prashantxd.in`.
 
 ## 10. Publish later code changes
 

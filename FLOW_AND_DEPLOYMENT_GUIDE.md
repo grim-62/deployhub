@@ -182,12 +182,12 @@ Example:
 ```dotenv
 PORT=5000
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/deployhub
-CLIENT_URL=https://deployhub.prashant.in
+CLIENT_URL=https://deployhub.prashantxd.in
 GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID
 GITHUB_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET
-GITHUB_CALLBACK_URL=https://deployhub.prashant.in/api/auth/github/callback
+GITHUB_CALLBACK_URL=https://deployhub.prashantxd.in/api/auth/github/callback
 SESSION_SECRET=YOUR_STRONG_SESSION_SECRET
-DEPLOYMENT_DOMAIN=deployhub.prashant.in
+DEPLOYMENT_DOMAIN=deployhub.prashantxd.in
 DEPLOYMENT_PROTOCOL=https
 DEPLOYMENT_ENCRYPTION_KEY=YOUR_64_CHAR_HEX_KEY
 ```
@@ -236,8 +236,8 @@ nano .env
 
 In GitHub, create an OAuth app and set:
 
-- Homepage URL: `https://deployhub.prashant.in`
-- Callback URL: `https://deployhub.prashant.in/api/auth/github/callback`
+- Homepage URL: `https://deployhub.prashantxd.in`
+- Callback URL: `https://deployhub.prashantxd.in/api/auth/github/callback`
 
 Copy the client ID and secret into `.env`.
 
@@ -255,7 +255,7 @@ If you want the deployed project URLs to live under the same subdomain root, als
 *.deployhub  A    EC2_PUBLIC_IP
 ```
 
-If you prefer the platform to live on `prashant.in` and project subdomains under `*.prashant.in`, then set the root domain accordingly and use the wildcard record for that zone instead.
+In Hostinger, create A records for `deployhub` and `*.deployhub`, both pointing to the EC2 Elastic IP. Leave the apex `prashantxd.in` and its existing mail records unchanged.
 
 ### 6) Request wildcard TLS certificate
 
@@ -265,8 +265,8 @@ sudo certbot certonly --manual --preferred-challenges dns \
   --config-dir "$PWD/certs" \
   --work-dir "$PWD/certs/work" \
   --logs-dir "$PWD/certs/logs" \
-  -d deployhub.prashant.in \
-  -d "*.deployhub.prashant.in"
+  -d deployhub.prashantxd.in \
+  -d "*.deployhub.prashantxd.in"
 ```
 
 This creates the certificate files the stack expects under `certs/live/...`.
@@ -284,7 +284,7 @@ sudo docker compose ps
 Open the main app at:
 
 ```text
-https://deployhub.prashant.in
+https://deployhub.prashantxd.in
 ```
 
 Then:
@@ -300,23 +300,23 @@ Then:
 
 ---
 
-## 6. Custom domain example: deployhub.prashant.in
+## 6. Custom domain example: deployhub.prashantxd.in
 
-If your main domain is `prashantxu.in` and you want DeployHub at `deployhub.prashant.in`, the target setup is:
+Your main domain is `prashantxd.in`; DeployHub uses `deployhub.prashantxd.in`:
 
-- `deployhub.prashant.in` -> EC2 public IP
-- wildcard subdomain for project apps, for example `*.deployhub.prashant.in` -> EC2 public IP
+- `deployhub.prashantxd.in` -> EC2 Elastic IP
+- wildcard subdomain for project apps, `*.deployhub.prashantxd.in` -> EC2 Elastic IP
 
 Recommended `.env` values:
 
 ```dotenv
-CLIENT_URL=https://deployhub.prashant.in
-GITHUB_CALLBACK_URL=https://deployhub.prashant.in/api/auth/github/callback
-DEPLOYMENT_DOMAIN=deployhub.prashant.in
+CLIENT_URL=https://deployhub.prashantxd.in
+GITHUB_CALLBACK_URL=https://deployhub.prashantxd.in/api/auth/github/callback
+DEPLOYMENT_DOMAIN=deployhub.prashantxd.in
 DEPLOYMENT_PROTOCOL=https
 ```
 
-If the app should generate URLs using the root domain `prashant.in`, change `DEPLOYMENT_DOMAIN` and DNS records to match your chosen root layout.
+The app generates project URLs as subdomains of `deployhub.prashantxd.in`.
 
 ---
 
@@ -374,7 +374,7 @@ The full live public deployment still requires an external Docker-enabled server
 
 1. Configure a real EC2 instance with Docker installed
 2. Set `.env` values for your own domain and GitHub OAuth app
-3. Create DNS records for `deployhub.prashant.in` and wildcard subdomains
+3. Create Hostinger DNS records for `deployhub.prashantxd.in` and wildcard subdomains
 4. Request the TLS certificate
 5. Run `docker compose up -d --build`
 6. Sign in, create a project, and verify the deployment reaches `LIVE`

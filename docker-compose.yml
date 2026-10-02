@@ -58,7 +58,7 @@ services:
     container_name: deployhub-nginx
     restart: unless-stopped
     environment:
-      DEPLOYMENT_DOMAIN: ${DEPLOYMENT_DOMAIN:-deployhub.prashant.in}
+      DEPLOYMENT_DOMAIN: ${DEPLOYMENT_DOMAIN:-deployhub.prashantxd.in}
       NGINX_ENVSUBST_FILTER: ^DEPLOYMENT_DOMAIN$
     depends_on:
       server:
