@@ -1,88 +1,112 @@
 # DeployHub on AWS EC2
 
-This guide deploys DeployHub to one Ubuntu EC2 instance using Docker Compose. It assumes you have a GitHub repository for this project, a domain you control, and permission to create DNS records for that domain.
+Follow this guide from top to bottom to publish the complete DeployHub repository to GitHub, create an Ubuntu EC2 server, and start the app with Docker Compose. The client, API, PostgreSQL, and Nginx are deployed together from this one repository.
 
-## 1. Create the EC2 instance
+Example domain used below: `deployhub.prashant.in`. Replace it everywhere if your actual domain is different.
 
-Create an Ubuntu 24.04 LTS instance. Allocate an Elastic IP and associate it with the instance so its address remains stable.
+## 1. Push the project to GitHub
 
-Configure the EC2 security group with these inbound rules only:
+Run these commands in a terminal on your development computer from the DeployHub repository root:
+
+```sh
+git status --short
+git check-ignore .env
+git add -A
+git status --short
+git commit -m "Prepare DeployHub for EC2 deployment"
+git push -u origin main
+```
+
+If your default branch is not `main`, replace `main` with the branch shown by `git branch --show-current`. The `.env` file must be ignored and must not appear in `git status`; never push production secrets, TLS certificates, or `.env` to GitHub. If `git push` says there is no `origin`, create an empty GitHub repository and connect it with:
+
+```sh
+git remote add origin YOUR_GITHUB_REPOSITORY_URL
+git push -u origin main
+```
+
+## 2. Create the EC2 instance
+
+In AWS, launch an **Ubuntu Server 24.04 LTS** instance. For a small test deployment, choose at least 2 vCPUs, 4 GB RAM, and 20 GB storage; real build workloads may need more. Create or select a key pair and download its `.pem` file. Allocate and associate an Elastic IP so the address does not change when the instance is stopped and started.
+
+Create a security group with these inbound rules:
 
 | Port | Protocol | Source | Purpose |
 | --- | --- | --- | --- |
-| 22 | TCP | Your IP address | SSH administration |
-| 80 | TCP | 0.0.0.0/0 and ::/0 | HTTP redirect to HTTPS |
-| 443 | TCP | 0.0.0.0/0 and ::/0 | HTTPS application traffic |
+| 22 | TCP | Your current public IP only | SSH |
+| 80 | TCP | Anywhere (IPv4 and IPv6) | HTTP to HTTPS redirect |
+| 443 | TCP | Anywhere (IPv4 and IPv6) | HTTPS |
 
-Do not expose PostgreSQL `5432`, API `5000`, client `3000`/`8080`, or deployment ports `31000-65535`. The Compose stack only publishes `80` and `443`.
+Do not open PostgreSQL `5432`, API `5000`, client `8080`, or project container ports to the internet. The Compose stack only publishes host ports `80` and `443`.
 
-Connect to the instance using your EC2 key pair:
+Connect from your computer. On Linux/macOS/Git Bash, run:
 
 ```sh
-ssh -i YOUR_KEY.pem ubuntu@EC2_PUBLIC_IP
+ssh -i YOUR_KEY.pem ubuntu@EC2_ELASTIC_IP
 ```
 
-## 2. Install Docker and Git
+On Windows PowerShell, run:
+
+```powershell
+ssh -i .\YOUR_KEY.pem ubuntu@EC2_ELASTIC_IP
+```
+
+The remote Linux account is `ubuntu`, not `root`. Once connected, the prompt will be on the EC2 machine.
+
+## 3. Install Docker and Git on EC2
+
+Run these commands in the SSH session on EC2:
 
 ```sh
 sudo apt update
-sudo apt install -y docker.io docker-compose-plugin git certbot
-sudo systemctl enable docker
-sudo systemctl start docker
+sudo apt install -y docker.io docker-compose-v2 git certbot dnsutils
+sudo systemctl enable --now docker
 sudo docker version
 sudo docker compose version
 ```
 
-Use `sudo docker compose` for the commands below unless you have deliberately configured the `ubuntu` user for Docker access. Membership in the Docker group grants root-equivalent access to the instance.
+Use `sudo docker compose` for the commands below. Adding `ubuntu` to the Docker group grants root-equivalent control of the machine, so this guide does not do that.
 
-## 3. Point the domain to EC2
+## 4. Configure DNS
 
-At your DNS provider, create these records using the Elastic IP:
+At the DNS provider for your domain, point both the DeployHub host and the project subdomains at the EC2 Elastic IP. For `deployhub.prashant.in`, add:
 
 | Name | Type | Value |
 | --- | --- | --- |
-| `@` | A | `EC2_PUBLIC_IP` |
-| `*` | A | `EC2_PUBLIC_IP` |
+| `deployhub` | A | `EC2_ELASTIC_IP` |
+| `*.deployhub` | A | `EC2_ELASTIC_IP` |
 
-The wildcard record is required for per-project subdomains. Wait for DNS propagation before requesting the certificate. You can check with:
+The wildcard record allows project URLs under `*.deployhub.prashant.in`. Wait until these return the Elastic IP before continuing:
 
 ```sh
-dig +short YOUR_DOMAIN
-dig +short test.YOUR_DOMAIN
+dig +short deployhub.prashant.in
+dig +short test.deployhub.prashant.in
 ```
 
-Both commands should return the Elastic IP.
+If your DNS provider uses a different record-name format, enter the equivalent fully qualified names `deployhub.prashant.in` and `*.deployhub.prashant.in`.
 
-## 4. Clone and configure DeployHub
+## 5. Clone the GitHub repository on EC2
+
+Still in the EC2 SSH session, clone the repository you pushed in step 1:
 
 ```sh
-git clone YOUR_GIT_REPOSITORY_URL deployhub
+git clone YOUR_GITHUB_REPOSITORY_URL deployhub
 cd deployhub
-cp .env.example .env
-nano .env
 ```
 
-Set these values in `.env`:
+Use the HTTPS or SSH clone URL shown by GitHub. For a private repository, configure an SSH deploy key for EC2 or another secure non-interactive GitHub authentication method before cloning; do not put a personal access token in the clone URL.
 
-```dotenv
-NODE_ENV=production
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=REPLACE_WITH_RANDOM_HEX
-POSTGRES_DB=deployhub
-DATABASE_URL=postgresql://postgres:REPLACE_WITH_RANDOM_HEX@postgres:5432/deployhub
-PORT=5000
-CLIENT_URL=https://YOUR_DOMAIN
-GITHUB_CLIENT_ID=YOUR_GITHUB_OAUTH_CLIENT_ID
-GITHUB_CLIENT_SECRET=YOUR_GITHUB_OAUTH_CLIENT_SECRET
-GITHUB_CALLBACK_URL=https://YOUR_DOMAIN/api/auth/github/callback
-SESSION_SECRET=REPLACE_WITH_RANDOM_HEX
-DEPLOYMENT_DOMAIN=YOUR_DOMAIN
-DEPLOYMENT_PROTOCOL=https
-DEPLOYMENT_ENCRYPTION_KEY=REPLACE_WITH_64_HEX_CHARACTERS
-TLS_CERT_DIR=./certs
-```
+## 6. Configure GitHub OAuth
 
-Generate strong values on the EC2 instance and paste them into `.env`:
+Before starting the app, create an OAuth App in GitHub under **Settings > Developer settings > OAuth Apps > New OAuth App**:
+
+- Homepage URL: `https://deployhub.prashant.in`
+- Authorization callback URL: `https://deployhub.prashant.in/api/auth/github/callback`
+
+Keep the generated client ID and secret available for the `.env` setup below. DeployHub requests the `repo` scope to access repositories allowed by the signing-in GitHub account.
+
+## 7. Create the production .env file
+
+Generate three separate values on EC2:
 
 ```sh
 openssl rand -hex 24
@@ -90,24 +114,44 @@ openssl rand -hex 48
 openssl rand -hex 32
 ```
 
-Use the first output for `POSTGRES_PASSWORD` and the same value in `DATABASE_URL`; the second for `SESSION_SECRET`; and the third for `DEPLOYMENT_ENCRYPTION_KEY`. Keeping these values stable is important: changing the encryption key makes saved project environment variables unreadable. Use the generated hexadecimal PostgreSQL password as-is so it does not require URL encoding.
+Use the first output as `POSTGRES_PASSWORD`, the second as `SESSION_SECRET`, and the third as `DEPLOYMENT_ENCRYPTION_KEY`. Keep the encryption key stable and backed up; changing it makes previously saved project environment variables unreadable.
 
-Do not commit or share `.env`. It contains the database password, session secret, OAuth secret, and encryption key.
-
-## 5. Create the wildcard TLS certificate
-
-The Nginx service expects these files inside the mounted `certs` directory:
-
-```text
-certs/live/YOUR_DOMAIN/fullchain.pem
-certs/live/YOUR_DOMAIN/privkey.pem
-```
-
-Request a wildcard certificate using DNS-01 validation. Certbot will print a TXT record name and value; add that TXT record at your DNS provider and wait until it is visible before continuing in Certbot.
+Create the local environment file on EC2 and edit it:
 
 ```sh
-DOMAIN=YOUR_DOMAIN
+cp .env.example .env
+nano .env
+```
+
+Set the values below. Replace every `REPLACE_...` and `YOUR_...` value, and use the same generated database password in both places:
+
+```dotenv
+NODE_ENV=production
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=REPLACE_WITH_FIRST_HEX_OUTPUT
+POSTGRES_DB=deployhub
+DATABASE_URL=postgresql://postgres:REPLACE_WITH_FIRST_HEX_OUTPUT@postgres:5432/deployhub
+PORT=5000
+CLIENT_URL=https://deployhub.prashant.in
+GITHUB_CLIENT_ID=YOUR_GITHUB_OAUTH_CLIENT_ID
+GITHUB_CLIENT_SECRET=YOUR_GITHUB_OAUTH_CLIENT_SECRET
+GITHUB_CALLBACK_URL=https://deployhub.prashant.in/api/auth/github/callback
+SESSION_SECRET=REPLACE_WITH_SECOND_HEX_OUTPUT
+DEPLOYMENT_DOMAIN=deployhub.prashant.in
+DEPLOYMENT_PROTOCOL=https
+DEPLOYMENT_ENCRYPTION_KEY=REPLACE_WITH_THIRD_HEX_OUTPUT
+TLS_CERT_DIR=./certs
+```
+
+Save in nano with `Ctrl+O`, Enter, then `Ctrl+X`. The `.env` file is ignored by Git. Do not commit it or paste its contents into chat or tickets.
+
+## 8. Create the wildcard HTTPS certificate
+
+The certificate must cover the main DeployHub host and its project subdomains. Certbot's DNS-01 challenge requires you to add the TXT record it prints at your DNS provider. Run this on EC2 from the `deployhub` directory:
+
+```sh
 mkdir -p certs
+DOMAIN=deployhub.prashant.in
 sudo certbot certonly --manual --preferred-challenges dns \
   --config-dir "$PWD/certs" \
   --work-dir "$PWD/certs/work" \
@@ -115,26 +159,18 @@ sudo certbot certonly --manual --preferred-challenges dns \
   -d "$DOMAIN" -d "*.$DOMAIN"
 ```
 
-If Certbot reports a permissions error, ensure the `certs` directory is writable by the Certbot process. The private key must remain readable by the Nginx container and must not be committed; `certs/` is ignored by Git.
+When prompted, create the requested `_acme-challenge` TXT record and wait for it to propagate before pressing Enter in Certbot. The expected files are:
 
-This manual DNS certificate does not renew automatically. Before it expires, repeat the DNS-01 renewal process and restart Nginx:
-
-```sh
-sudo docker compose restart nginx
+```text
+certs/live/deployhub.prashant.in/fullchain.pem
+certs/live/deployhub.prashant.in/privkey.pem
 ```
 
-## 6. Configure GitHub OAuth
+The manual DNS certificate does not renew automatically. Repeat the DNS-01 process before expiry and restart Nginx after renewing. Keep `certs/` private; it is Git-ignored.
 
-In GitHub, open **Settings > Developer settings > OAuth Apps > New OAuth App** and set:
+## 9. Validate and start DeployHub
 
-- Application URL: `https://YOUR_DOMAIN`
-- Authorization callback URL: `https://YOUR_DOMAIN/api/auth/github/callback`
-
-Copy the generated client ID and client secret into `.env` as `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. DeployHub requests the `repo` scope so it can read private repositories that the authorizing account can access. The token stays server-side.
-
-## 7. Validate and start the stack
-
-From the repository root, validate Compose without printing resolved secrets, then build and start:
+From the EC2 `deployhub` directory:
 
 ```sh
 sudo docker compose config -q
@@ -142,45 +178,57 @@ sudo docker compose up -d --build
 sudo docker compose ps
 ```
 
-Follow startup logs if a service is unhealthy:
+Check logs if a service is not healthy:
 
 ```sh
-sudo docker compose logs --tail=100 server nginx postgres
+sudo docker compose logs --tail=100 postgres server client nginx
 ```
 
-Database migrations run automatically before the API starts. PostgreSQL data is stored in the named `postgres_data` volume. Back up this volume regularly; deleting it removes DeployHub users, projects, and deployment history.
+When the services are up, open `https://deployhub.prashant.in`, sign in with GitHub, select a repository, choose Frontend or Backend, configure the branch and environment variables, and deploy. The app shows deployment status/logs, then opens the project detail page when deployment becomes live.
 
-Open `https://YOUR_DOMAIN`, sign in with GitHub, select a repository, choose Frontend or Backend, configure the branch and environment variables, and deploy. Project URLs use this form:
+## 10. Publish later code changes
 
-```text
-https://project-name-PROJECT_ID.YOUR_DOMAIN
+After making and testing code changes on your development computer, push them:
+
+```sh
+git add -A
+git commit -m "Describe the change"
+git push
 ```
 
-## 8. Network and deployment security
+Then SSH into EC2 and update/rebuild the running app:
 
-- Nginx is the only service publishing ports on the EC2 host.
+```sh
+cd ~/deployhub
+git pull --ff-only
+sudo docker compose up -d --build
+sudo docker compose ps
+```
+
+The database uses the persistent `postgres_data` volume, so ordinary rebuilds do not delete projects. Never run `docker compose down -v` unless you intentionally want to delete the database volume and all stored app data.
+
+## Network and security notes
+
+- Nginx is the only Compose service publishing ports on the EC2 host.
 - PostgreSQL, API, and client communicate on the private Compose network.
-- Deployed projects use the separate `deployhub_deployments` Docker network shared with Nginx, not the PostgreSQL network.
-- The API container mounts `/var/run/docker.sock` because it builds and runs project containers. Treat the API host and OAuth credentials as highly trusted.
-- Deployed application containers do not mount the Docker socket. They run with memory/CPU/PID limits, dropped capabilities, and `no-new-privileges`.
-- Environment variables are encrypted in PostgreSQL. Back up `DEPLOYMENT_ENCRYPTION_KEY` separately and preserve it during upgrades.
+- Project containers use a separate Docker network shared with Nginx, not PostgreSQL.
+- The API mounts `/var/run/docker.sock` to build and run project containers. Access to the EC2 host, API, and OAuth credentials must be tightly controlled; Docker socket access is effectively root access.
+- Project containers do not receive the Docker socket and are configured with resource limits and reduced privileges.
+- PostgreSQL data persists in the `postgres_data` volume. Back it up regularly.
+- Back up `DEPLOYMENT_ENCRYPTION_KEY` separately and preserve it during updates.
 
 ## Troubleshooting
 
-Check service health and recent output:
+Check service status and recent logs:
 
 ```sh
 sudo docker compose ps
-sudo docker compose logs --tail=200 server nginx
+sudo docker compose logs --tail=200 server nginx postgres
 ```
 
-If OAuth returns to login with an error, confirm the OAuth callback exactly matches `GITHUB_CALLBACK_URL`, and verify `CLIENT_URL`, the database connection, and all OAuth values in `.env`.
+If OAuth fails, confirm `CLIENT_URL`, `GITHUB_CALLBACK_URL`, OAuth credentials, and the registered callback URL match exactly. If the main site works but project subdomains do not, check the wildcard DNS record, wildcard certificate, and `deployhub_deployments` network. If a project deployment fails, inspect its deployment logs; common causes include a missing Node `build`/`start` script, an invalid branch, Docker problems, or an app that does not listen on `0.0.0.0` and `PORT`.
 
-If a deployment fails, open its DeployHub deployment details page for persisted logs. Common causes include an invalid branch, missing `build` or `start` script, an unsupported repository layout, unavailable Docker daemon, incorrect wildcard DNS, or missing/expired TLS files.
-
-If the main domain works but project subdomains do not, verify the wildcard A record, certificate includes `*.YOUR_DOMAIN`, the runner's deployment network is `deployhub_deployments`, and Nginx is healthy.
-
-Compose configuration changes require recreating the affected services:
+After changing Compose configuration, recreate the affected services with:
 
 ```sh
 sudo docker compose up -d --force-recreate server nginx
