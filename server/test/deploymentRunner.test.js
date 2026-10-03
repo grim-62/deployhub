@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createDeploymentHostname, createDockerfile, createNginxConfig, createProjectNginxConfig, detectPackageManager } from '../src/services/deploymentRunner.js'
+import { createDeploymentHostname, createDockerfile, createFrontendBuildScript, createNginxConfig, createProjectNginxConfig, detectPackageManager } from '../src/services/deploymentRunner.js'
 
 test('deployment hostnames sanitize project names and validate the configured domain', () => {
   assert.equal(createDeploymentHostname('My React App!', 42, 'example.com'), 'my-react-app-42.example.com')
@@ -18,6 +18,7 @@ test('Dockerfiles use the selected project type and detected package manager', (
   assert.match(frontend, /pnpm install --frozen-lockfile/)
   assert.match(frontend, /RUN --mount=type=secret,id=deployhub-env/)
   assert.match(frontend, /node \.deployhub-build\.cjs/)
+  assert.match(frontend, /COPY --from=build \/app\/\.deployhub-output\//)
   assert.match(frontend, /EXPOSE 31001/)
   assert.match(frontend, /\.deployhub-site\.conf/)
   assert.match(frontend, /nginx-unprivileged/)
@@ -30,6 +31,13 @@ test('Dockerfiles use the selected project type and detected package manager', (
   assert.match(backend, /ENV PORT=31002/)
   assert.match(backend, /USER node/)
   assert.match(backend, /npm", "start/)
+})
+
+test('frontend build script normalizes common static output directories', () => {
+  const script = createFrontendBuildScript('npm')
+  assert.match(script, /\['dist', 'build', 'out', '\.output\/public'\]/)
+  assert.match(script, /index\.html/)
+  assert.match(script, /\.deployhub-output/)
 })
 
 test('Nginx config proxies the deployment hostname to its isolated container', () => {

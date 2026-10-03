@@ -68,6 +68,36 @@ export function detectPackageManager(packageJson, lockFiles = []) {
   return 'npm'
 }
 
+export function createFrontendBuildScript(packageManager) {
+  return [
+    "const fs = require('node:fs')",
+    "const path = require('node:path')",
+    "const { spawnSync } = require('node:child_process')",
+    "const secretPath = '/run/secrets/deployhub-env'",
+    "const variables = fs.existsSync(secretPath) ? JSON.parse(fs.readFileSync(secretPath, 'utf8')) : {}",
+    `const result = spawnSync(${JSON.stringify(packageManager)}, ['run', 'build'], { stdio: 'inherit', env: { ...process.env, ...variables } })`,
+    'if (result.status !== 0) process.exit(result.status ?? 1)',
+    "const findIndexDirectory = (directory, depth = 0) => {",
+    "  if (depth > 4 || !fs.existsSync(directory) || !fs.statSync(directory).isDirectory()) return null",
+    "  if (fs.existsSync(path.join(directory, 'index.html'))) return directory",
+    "  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {",
+    "    if (!entry.isDirectory() || ['node_modules', '.git'].includes(entry.name)) continue",
+    '    const match = findIndexDirectory(path.join(directory, entry.name), depth + 1)',
+    '    if (match) return match',
+    '  }',
+    '  return null',
+    '}',
+    "const candidates = ['dist', 'build', 'out', '.output/public']",
+    'const outputDirectory = candidates.map((candidate) => findIndexDirectory(candidate)).find(Boolean)',
+    "if (!outputDirectory) {",
+    "  console.error(`Frontend build completed, but no index.html was found under: ${candidates.join(', ')}`)",
+    '  process.exit(1)',
+    '}',
+    "fs.cpSync(outputDirectory, '.deployhub-output', { recursive: true })",
+    '',
+  ].join('\n')
+}
+
 export function createDockerfile(projectType, packageManager = 'npm', containerPort = 31000, hasLockFile = true) {
   if (!['npm', 'yarn', 'pnpm'].includes(packageManager)) {
     throw new Error('Package manager must be npm, yarn, or pnpm.')
@@ -95,7 +125,7 @@ export function createDockerfile(projectType, packageManager = 'npm', containerP
       'COPY . .',
       'RUN --mount=type=secret,id=deployhub-env,required=false node .deployhub-build.cjs',
       'FROM nginxinc/nginx-unprivileged:alpine',
-      'COPY --from=build /app/dist /usr/share/nginx/html',
+      'COPY --from=build /app/.deployhub-output/ /usr/share/nginx/html/',
       'COPY .deployhub-site.conf /etc/nginx/conf.d/default.conf',
       `EXPOSE ${containerPort}`,
       '',
@@ -268,15 +298,7 @@ async function runDeployment(deployment) {
     }
     if (projectType === 'frontend') {
       await writeFile(join(sourceDirectory, '.deployhub-site.conf'), createProjectNginxConfig(containerPort))
-      await writeFile(join(sourceDirectory, '.deployhub-build.cjs'), [
-        "const fs = require('node:fs')",
-        "const { spawnSync } = require('node:child_process')",
-        "const secretPath = '/run/secrets/deployhub-env'",
-        "const variables = fs.existsSync(secretPath) ? JSON.parse(fs.readFileSync(secretPath, 'utf8')) : {}",
-        `const result = spawnSync(${JSON.stringify(packageManager)}, ['run', 'build'], { stdio: 'inherit', env: { ...process.env, ...variables } })`,
-        'process.exit(result.status ?? 1)',
-        '',
-      ].join('\n'))
+      await writeFile(join(sourceDirectory, '.deployhub-build.cjs'), createFrontendBuildScript(packageManager))
     }
     await repository.updateDeploymentStatus(deploymentId, projectId, 'BUILDING')
     await appendLog('Building the project container image.')
