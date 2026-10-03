@@ -38,6 +38,16 @@ Create a security group with these inbound rules:
 
 Do not open PostgreSQL `5432`, API `5000`, client `8080`, or project container ports to the internet. The Compose stack only publishes host ports `80` and `443`.
 
+### Which URL to open
+
+Do not open `https://3.107.167.85:5000`. Port `5000` is the private API port inside Docker and is not published to the internet. The public entry point is Nginx on ports `80` and `443`; after DNS and TLS are configured, open:
+
+```text
+https://deployhub.prashantxd.in
+```
+
+The HTTPS certificate is issued for the domain, not the IP address. Opening the public IP directly over HTTPS will cause a certificate name mismatch. Use an EC2 Elastic IP for DNS so the address remains stable.
+
 Connect from your computer. On Linux/macOS/Git Bash, run:
 
 ```sh
@@ -83,6 +93,10 @@ dig +short test.deployhub.prashantxd.in
 ```
 
 In Hostinger's record form, enter host names `deployhub` and `*.deployhub`; Hostinger appends the zone `prashantxd.in`. Do not change the apex `prashantxd.in` record unless you also want to move your root website.
+
+If `3.107.167.85` is the Elastic IP currently attached to the instance, use it as the value for both A records. If it is only the instance's temporary public IPv4 address, first allocate and associate an Elastic IP in AWS, then use the Elastic IP instead. In Hostinger, make sure the domain is using Hostinger DNS nameservers before editing these records. Update conflicting records for the `deployhub` names if they exist, but leave unrelated website and mail records alone.
+
+Both should return the EC2 Elastic IP. If they do not, wait for DNS propagation and check the Hostinger nameservers and A records again.
 
 ## 5. Clone the GitHub repository on EC2
 
@@ -186,6 +200,20 @@ sudo docker compose logs --tail=100 postgres server client nginx
 ```
 
 When the services are up, open `https://deployhub.prashantxd.in`, sign in with GitHub, select a repository, choose Frontend or Backend, configure the branch and environment variables, and deploy. The app shows deployment status/logs, then opens the project detail page when deployment becomes live. Project URLs use `https://PROJECT-NAME-ID.deployhub.prashantxd.in`.
+
+If the domain does not open, check in this order:
+
+1. In the EC2 security group, allow inbound TCP `80` and `443` from `0.0.0.0/0`; restrict TCP `22` to your own IP.
+2. Confirm the DNS checks above resolve to the EC2 Elastic IP.
+3. Confirm the certificate files exist at `certs/live/deployhub.prashantxd.in/fullchain.pem` and `certs/live/deployhub.prashantxd.in/privkey.pem`.
+4. Check container status and logs:
+
+```sh
+sudo docker compose ps
+sudo docker compose logs --tail=100 nginx server postgres
+```
+
+The `nginx` container must be running and show published host ports `80` and `443`. Do not fix access by opening port `5000`; that port is intended to remain private.
 
 ## 10. Publish later code changes
 

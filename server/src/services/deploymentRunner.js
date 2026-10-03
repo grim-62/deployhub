@@ -278,7 +278,7 @@ async function runDeployment(deployment) {
     await repository.updateDeploymentStatus(deploymentId, projectId, 'BUILDING')
     await appendLog('Building the project container image.')
     const buildArguments = [
-      'build', '--file', 'Dockerfile.deployhub', '--tag', imageName,
+      'build', '--file', join(sourceDirectory, 'Dockerfile.deployhub'), '--tag', imageName,
       '--label', `deployhub.project=${projectId}`,
       '--label', `deployhub.deployment=${deploymentId}`,
     ]

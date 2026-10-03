@@ -8,7 +8,7 @@ function logDatabaseConnectionDetails(connectionString) {
   try {
     const connection = new URL(connectionString)
     const userInfo = connection.username
-      ? `${decodeURIComponent(connection.username)}:${connection.password ? connection.password : ''}@`
+      ? `${decodeURIComponent(connection.username)}:${connection.password ? '[REDACTED]' : ''}@`
       : ''
     console.info(`[database] DATABASE_URL=${connection.protocol}//${userInfo}${connection.host}${connection.pathname}`)
   } catch {
