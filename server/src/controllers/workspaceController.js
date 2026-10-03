@@ -2,6 +2,7 @@ import * as dashboardRepository from '../repositories/dashboardRepository.js'
 import { findGitHubAccessTokenByUserId } from '../models/userModel.js'
 import { findGitHubRepositoryById } from '../services/githubRepositoryService.js'
 import { encryptEnvironmentVariables } from '../services/deploymentSecrets.js'
+import { removeProjectResources } from '../services/deploymentRunner.js'
 import { AppError } from '../utils/AppError.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess } from '../utils/responses.js'
@@ -47,6 +48,19 @@ export const getProject = asyncHandler(async (request, response) => {
   const project = await dashboardRepository.getProject(request.session.userId, request.validated.params.id)
   if (!project) throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found.')
   return sendSuccess(response, { project })
+})
+
+export const deleteProject = asyncHandler(async (request, response) => {
+  const project = await dashboardRepository.deleteProject(request.session.userId, request.validated.params.id)
+  if (!project) throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found.')
+
+  try {
+    await removeProjectResources(project)
+    return sendSuccess(response, { deleted: true, cleanupPending: false })
+  } catch (error) {
+    console.error(`Project ${project.id} was deleted, but runtime cleanup failed:`, error.message)
+    return sendSuccess(response, { deleted: true, cleanupPending: true }, 202)
+  }
 })
 
 export const queueProjectDeployment = asyncHandler(async (request, response) => {

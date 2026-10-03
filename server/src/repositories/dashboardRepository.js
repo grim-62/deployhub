@@ -151,6 +151,48 @@ export async function getProject(userId, projectId) {
   return result.rows[0] ?? null
 }
 
+export async function deleteProject(userId, projectId) {
+  const client = await getDatabase().connect()
+  try {
+    await client.query('BEGIN')
+    const projectResult = await client.query(
+      `SELECT id, status, container_id AS "containerId",
+         production_url AS "productionUrl"
+       FROM projects WHERE user_id = $1 AND id = $2 FOR UPDATE`,
+      [userId, projectId],
+    )
+    const project = projectResult.rows[0]
+    if (!project) {
+      await client.query('ROLLBACK')
+      return null
+    }
+
+    const activeDeployment = await client.query(
+      `SELECT 1 FROM deployments
+       WHERE user_id = $1 AND project_id = $2
+         AND UPPER(status) = ANY($3::text[])
+       LIMIT 1`,
+      [userId, projectId, ['QUEUED', 'BUILDING', 'DEPLOYING']],
+    )
+    if (['QUEUED', 'BUILDING', 'DEPLOYING'].includes(String(project.status).toUpperCase()) || activeDeployment.rowCount > 0) {
+      throw new AppError(409, 'DEPLOYMENT_IN_PROGRESS', 'Wait for the active deployment to finish before deleting this project.')
+    }
+
+    const deletedProject = await client.query(
+      `DELETE FROM projects WHERE user_id = $1 AND id = $2
+       RETURNING id, container_id AS "containerId", production_url AS "productionUrl"`,
+      [userId, projectId],
+    )
+    await client.query('COMMIT')
+    return deletedProject.rows[0] ?? null
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
 export async function queueProjectDeployment(userId, projectId) {
   const databaseClient = getDatabase()
   const client = await databaseClient.connect()

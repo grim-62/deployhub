@@ -25,6 +25,11 @@ export async function getProject(projectId) {
   return response.data.project
 }
 
+export async function deleteProject(projectId) {
+  const response = await apiRequest(`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' })
+  return response.data
+}
+
 export async function queueProjectDeployment(projectId) {
   const response = await apiRequest(`/projects/${encodeURIComponent(projectId)}/deploy`, { method: 'POST' })
   return response.data.deployment

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { createProject, getProject, listActivity, listDeployments, listProjects, queueProjectDeployment } from '../controllers/workspaceController.js'
+import { createProject, deleteProject, getProject, listActivity, listDeployments, listProjects, queueProjectDeployment } from '../controllers/workspaceController.js'
 import { getDeployment, getDeploymentLogs } from '../controllers/deploymentController.js'
 import { requireAuth } from '../middleware/errorHandler.js'
 import { validateRequest } from '../middleware/validateRequest.js'
@@ -11,6 +11,9 @@ router.get('/projects', requireAuth, listProjects)
 router.get('/projects/:id', requireAuth, validateRequest({
 	params: z.object({ id: z.coerce.number().int().positive() }),
 }), getProject)
+router.delete('/projects/:id', requireAuth, validateRequest({
+	params: z.object({ id: z.coerce.number().int().positive() }),
+}), deleteProject)
 router.post('/projects', requireAuth, validateRequest({
 	body: z.object({
 		githubRepoId: z.coerce.number().int().positive(),

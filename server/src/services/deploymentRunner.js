@@ -391,6 +391,71 @@ async function runDeployment(deployment) {
   }
 }
 
+export async function removeProjectResources(project) {
+  const errors = []
+  let hostname = null
+  if (project.productionUrl) {
+    try {
+      const parsedUrl = new URL(project.productionUrl)
+      if (!parsedUrl.hostname.endsWith(`.${env.deploymentDomain}`)) {
+        throw new Error('Project URL does not belong to the configured deployment domain.')
+      }
+      hostname = parsedUrl.hostname
+    } catch (error) {
+      errors.push(error)
+    }
+  }
+
+  if (hostname) {
+    const routePath = join(env.deploymentNginxConfigDir, `deployhub-${hostname}.conf`)
+    let previousConfig = null
+    try {
+      previousConfig = await readFile(routePath, 'utf8')
+    } catch (error) {
+      if (error.code !== 'ENOENT') errors.push(error)
+    }
+    if (previousConfig !== null) {
+      try {
+        await rm(routePath, { force: true })
+        await run('docker', ['exec', env.deploymentNginxContainer, 'nginx', '-t'])
+        await run('docker', ['exec', env.deploymentNginxContainer, 'nginx', '-s', 'reload'])
+      } catch (error) {
+        errors.push(error)
+        await writeFile(routePath, previousConfig, { mode: 0o644 }).catch((restoreError) => errors.push(restoreError))
+      }
+    }
+  }
+
+  if (project.containerId) {
+    if (!/^[a-f0-9]{12,64}$/i.test(project.containerId)) {
+      errors.push(new Error('Saved project container ID is invalid.'))
+    } else {
+      try {
+        const existingContainers = await run('docker', [
+          'ps', '--all', '--quiet', '--no-trunc', '--filter', `id=${project.containerId}`,
+        ])
+        if (existingContainers.trim()) {
+          await run('docker', ['rm', '--force', project.containerId])
+        }
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+  }
+
+  try {
+    const projectImages = await run('docker', [
+      'images', '--quiet', '--no-trunc', '--filter', `label=deployhub.project=${project.id}`,
+    ])
+    const imageIds = [...new Set(projectImages.split('\n').map((imageId) => imageId.trim()).filter(Boolean))]
+    if (imageIds.length) await run('docker', ['image', 'rm', '--force', ...imageIds])
+  } catch (error) {
+    errors.push(error)
+  }
+
+  if (errors.length) throw new AggregateError(errors, 'Project data was deleted, but some runtime resources could not be removed.')
+}
+
 export function startDeploymentWorker({ interval = pollInterval } = {}) {
   let stopped = false
   let processing = false
