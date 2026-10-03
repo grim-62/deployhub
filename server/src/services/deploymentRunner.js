@@ -18,16 +18,19 @@ function redact(value, accessToken, secretValues = []) {
   )
 }
 
-function run(command, args, { accessToken, secretValues = [], onOutput = () => {} } = {}) {
+function run(command, args, { accessToken, secretValues = [], onOutput = () => {}, extraEnv = {} } = {}) {
   return new Promise((resolve, reject) => {
     const output = []
     const child = spawn(command, args, {
-      env: accessToken ? {
+      env: {
         ...process.env,
+        ...extraEnv,
+        ...(accessToken ? {
         GIT_CONFIG_COUNT: '1',
         GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
         GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${accessToken}`).toString('base64')}`,
-      } : process.env,
+        } : {}),
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
     })
@@ -286,7 +289,11 @@ async function runDeployment(deployment) {
       buildArguments.push('--secret', `id=deployhub-env,src=${buildSecretPath}`)
     }
     buildArguments.push(sourceDirectory)
-    await run('docker', buildArguments, { onOutput, secretValues: environmentEntries.map(([, value]) => value) })
+    await run('docker', buildArguments, {
+      extraEnv: { DOCKER_BUILDKIT: '1' },
+      onOutput,
+      secretValues: environmentEntries.map(([, value]) => value),
+    })
 
     await repository.updateDeploymentStatus(deploymentId, projectId, 'DEPLOYING')
     await appendLog('Starting the project container.')
