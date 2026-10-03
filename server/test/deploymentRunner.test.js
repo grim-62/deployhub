@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createDeploymentHostname, createDockerfile, createFrontendBuildScript, createNginxConfig, createProjectNginxConfig, detectPackageManager } from '../src/services/deploymentRunner.js'
+import { createDeploymentHostname, createDockerfile, createFrontendBuildScript, createNginxConfig, createProjectNginxConfig, detectFrontendRuntime, detectPackageManager } from '../src/services/deploymentRunner.js'
 
 test('deployment hostnames sanitize project names and validate the configured domain', () => {
   assert.equal(createDeploymentHostname('My React App!', 42, 'example.com'), 'my-react-app-42.example.com')
@@ -38,6 +38,19 @@ test('frontend build script normalizes common static output directories', () => 
   assert.match(script, /\['dist', 'build', 'out', '\.output\/public'\]/)
   assert.match(script, /index\.html/)
   assert.match(script, /\.deployhub-output/)
+})
+
+test('Next.js frontends use a Node runtime instead of requiring a static export', () => {
+  assert.equal(detectFrontendRuntime({ dependencies: { next: '15.0.0' } }), 'nextjs')
+  assert.equal(detectFrontendRuntime({ devDependencies: { next: '15.0.0' } }), 'nextjs')
+  assert.equal(detectFrontendRuntime({ dependencies: { vite: '6.0.0' } }), 'static')
+
+  const dockerfile = createDockerfile('frontend', 'npm', 31003, true, 'nextjs')
+  assert.match(dockerfile, /FROM node:20-alpine AS build/)
+  assert.match(dockerfile, /FROM node:20-alpine\nWORKDIR \/app/)
+  assert.match(dockerfile, /CMD \["npm", "start"\]/)
+  assert.doesNotMatch(dockerfile, /nginx-unprivileged/)
+  assert.doesNotMatch(createFrontendBuildScript('npm', false), /deployhub-output/)
 })
 
 test('Nginx config proxies the deployment hostname to its isolated container', () => {

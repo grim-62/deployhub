@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, ExternalLink, GitBranch, LockKeyhole, Search } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { getGitHubRepositories } from '../api/github.js'
+import { analyzeGitHubRepositoryStack, getGitHubRepositories } from '../api/github.js'
 import { signInWithGitHub } from '../api/auth.js'
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Modal, Select, Table } from '../components/ui.jsx'
 
@@ -23,6 +23,9 @@ export default function GitHubRepositoriesPage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [projectType, setProjectType] = useState('')
   const [typeModalOpen, setTypeModalOpen] = useState(false)
+  const [stackAnalysis, setStackAnalysis] = useState(null)
+  const [stackStatus, setStackStatus] = useState('idle')
+  const stackRequestId = useRef(0)
   const selectedRepositoryId = searchParams.get('repo')
   const selectedRepository = repositories.find((repository) => String(repository.id) === selectedRepositoryId)
   const retry = () => {
@@ -31,9 +34,27 @@ export default function GitHubRepositoriesPage() {
     setRefreshKey((key) => key + 1)
   }
   const selectRepository = (repository) => {
+    const requestId = stackRequestId.current + 1
+    stackRequestId.current = requestId
     setProjectType('')
+    setStackAnalysis(null)
+    setStackStatus('loading')
     setSearchParams({ repo: String(repository.id) })
     setTypeModalOpen(true)
+    analyzeGitHubRepositoryStack(repository.id, repository.defaultBranch).then((analysis) => {
+      if (stackRequestId.current !== requestId) return
+      setStackAnalysis(analysis)
+      setProjectType(analysis.projectType || '')
+      setStackStatus('success')
+    }).catch(() => {
+      if (stackRequestId.current !== requestId) return
+      setStackStatus('error')
+    })
+  }
+
+  const closeTypeModal = () => {
+    stackRequestId.current += 1
+    setTypeModalOpen(false)
   }
 
   useEffect(() => {
@@ -125,16 +146,23 @@ export default function GitHubRepositoriesPage() {
     {status === 'success' && selectedRepository && <div className="repo-selection" role="status">
       <span className="repo-selection-icon"><Check size={14} /></span>
       <div><strong>{selectedRepository.fullName}</strong><small>Repository selected</small></div>
-      <Button variant="ghost" size="small" onClick={() => { setProjectType(''); setTypeModalOpen(false); setSearchParams({}) }}>Clear selection</Button>
+      <Button variant="ghost" size="small" onClick={() => { stackRequestId.current += 1; setProjectType(''); setStackAnalysis(null); setStackStatus('idle'); setTypeModalOpen(false); setSearchParams({}) }}>Clear selection</Button>
     </div>}
-    <Modal open={typeModalOpen && Boolean(selectedRepository)} title="Choose a service type" onClose={() => setTypeModalOpen(false)} footer={<><Button variant="ghost" onClick={() => setTypeModalOpen(false)}>Cancel</Button><Button variant="primary" disabled={!projectType} onClick={() => {
-      setTypeModalOpen(false)
+    <Modal open={typeModalOpen && Boolean(selectedRepository)} title="Choose a service type" onClose={closeTypeModal} footer={<><Button variant="ghost" onClick={closeTypeModal}>Cancel</Button><Button variant="primary" disabled={!projectType || stackStatus === 'loading'} onClick={() => {
+      closeTypeModal()
       navigate(`/projects/new/configure?repo=${encodeURIComponent(selectedRepository.id)}&type=${encodeURIComponent(projectType)}`)
     }}>Continue</Button></>}>
       <p className="service-type-intro">{selectedRepository?.fullName}</p>
+      <p className="service-type-intro" role="status" aria-live="polite">
+        {stackStatus === 'loading' && 'Detecting framework from package.json...'}
+        {stackStatus === 'success' && (stackAnalysis.detected
+          ? `Detected ${stackAnalysis.framework}. Suggested service: ${stackAnalysis.projectType}.`
+          : 'No supported root package.json framework detected; choose the service manually.')}
+        {stackStatus === 'error' && 'Stack detection is unavailable; choose the service type manually.'}
+      </p>
       <div className="project-type-options" role="radiogroup" aria-label="Project type">
         {['frontend', 'backend'].map((type) => <label className={`project-type-option${projectType === type ? ' selected' : ''}`} key={type}>
-          <input type="radio" name="projectType" value={type} checked={projectType === type} onChange={() => setProjectType(type)} />
+          <input type="radio" name="projectType" value={type} checked={projectType === type} disabled={stackStatus === 'loading'} onChange={() => setProjectType(type)} />
           <span><strong>{type === 'frontend' ? 'Frontend' : 'Backend'}</strong><small>{type === 'frontend' ? 'Web interface or static site' : 'Server-side application or API'}</small></span>
         </label>)}
       </div>

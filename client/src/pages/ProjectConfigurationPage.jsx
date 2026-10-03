@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Eye, EyeOff, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Eye, EyeOff, Plus, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { getGitHubRepository } from '../api/github.js'
+import { analyzeGitHubRepositoryStack, getGitHubRepository } from '../api/github.js'
 import { createProject, queueProjectDeployment } from '../api/workspace.js'
 import { Badge, Button, Card, ErrorState, Input, LoadingState } from '../components/ui.jsx'
+
+function formatCommitDate(value) {
+  if (!value) return 'Date unavailable'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Date unavailable'
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
 
 export default function ProjectConfigurationPage({ onNotify }) {
   const navigate = useNavigate()
@@ -15,6 +22,8 @@ export default function ProjectConfigurationPage({ onNotify }) {
   const [loading, setLoading] = useState(configurationIsValid)
   const [loadError, setLoadError] = useState(configurationIsValid ? '' : 'Select a GitHub repository and service type before configuring deployment.')
   const [branch, setBranch] = useState('')
+  const [stackAnalysis, setStackAnalysis] = useState(null)
+  const [stackStatus, setStackStatus] = useState(configurationIsValid ? 'loading' : 'idle')
   const [variables, setVariables] = useState([])
   const [nextVariableId, setNextVariableId] = useState(1)
   const [showValues, setShowValues] = useState(false)
@@ -39,6 +48,23 @@ export default function ProjectConfigurationPage({ onNotify }) {
 
     return () => { active = false }
   }, [configurationIsValid, repositoryId])
+
+  useEffect(() => {
+    if (!repository || !branch.trim()) return undefined
+    let active = true
+    const timer = setTimeout(() => {
+      analyzeGitHubRepositoryStack(repository.id, branch.trim()).then((analysis) => {
+        if (!active) return
+        setStackAnalysis(analysis)
+        setStackStatus('success')
+      }).catch(() => {
+        if (!active) return
+        setStackStatus('error')
+      })
+    }, 300)
+
+    return () => { active = false; clearTimeout(timer) }
+  }, [repository, branch])
 
   const addVariable = () => {
     setVariables((current) => [...current, { id: nextVariableId, key: '', value: '' }])
@@ -108,8 +134,22 @@ export default function ProjectConfigurationPage({ onNotify }) {
 
     <form className="predeploy-layout" onSubmit={deploy}>
       <Card className="predeploy-card">
+        <div className="predeploy-section-heading"><div><h2>Repository analysis</h2><p>{stackStatus === 'loading' ? 'Detecting framework and latest commit...' : `Branch: ${branch}`}</p></div>{stackAnalysis?.detected && <Badge>{stackAnalysis.framework}</Badge>}</div>
+        {stackStatus === 'error' && <p role="status">Could not analyze this branch. You can still continue with the selected project type.</p>}
+        {stackStatus === 'success' && <dl className="project-details-list">
+          <div><dt>Detected stack</dt><dd>{stackAnalysis.detected ? stackAnalysis.framework : 'Not detected'}</dd></div>
+          {stackAnalysis.projectType && <div><dt>Suggested service</dt><dd>{stackAnalysis.projectType === 'frontend' ? 'Frontend' : 'Backend'}{stackAnalysis.runtime === 'node' ? ' (Node.js runtime)' : ' (static site)'}</dd></div>}
+          <div><dt>Latest commit</dt><dd>{stackAnalysis.latestCommit ? <>
+            <a href={stackAnalysis.latestCommit.url || repository.htmlUrl} target="_blank" rel="noreferrer">{stackAnalysis.latestCommit.sha.slice(0, 7)}<ExternalLink size={12} /></a>
+            <span>{stackAnalysis.latestCommit.message.split('\n')[0] || 'No commit message'}</span>
+            <small>{stackAnalysis.latestCommit.author} - {formatCommitDate(stackAnalysis.latestCommit.date)}</small>
+          </> : 'No commit found on this branch.'}</dd></div>
+        </dl>}
+      </Card>
+
+      <Card className="predeploy-card">
         <div className="predeploy-section-heading"><div><h2>Project type</h2><p>Selected service runtime</p></div><Badge>{projectType === 'frontend' ? 'Frontend' : 'Backend'}</Badge></div>
-        <div className="form-field"><label htmlFor="deploy-branch">Branch</label><Input id="deploy-branch" value={branch} onChange={(event) => setBranch(event.target.value)} required maxLength={255} pattern="[A-Za-z0-9._/-]+" title="Use letters, numbers, dots, underscores, slashes, or hyphens." /><small>The runner builds this branch from GitHub.</small></div>
+        <div className="form-field"><label htmlFor="deploy-branch">Branch</label><Input id="deploy-branch" value={branch} onChange={(event) => { setBranch(event.target.value); setStackAnalysis(null); setStackStatus(event.target.value.trim() ? 'loading' : 'idle') }} required maxLength={255} pattern="[A-Za-z0-9._/-]+" title="Use letters, numbers, dots, underscores, slashes, or hyphens." /><small>The runner builds this branch from GitHub.</small></div>
       </Card>
 
       <Card className="predeploy-card">

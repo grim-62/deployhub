@@ -68,15 +68,20 @@ export function detectPackageManager(packageJson, lockFiles = []) {
   return 'npm'
 }
 
-export function createFrontendBuildScript(packageManager) {
+export function detectFrontendRuntime(packageJson) {
+  return packageJson?.dependencies?.next || packageJson?.devDependencies?.next ? 'nextjs' : 'static'
+}
+
+export function createFrontendBuildScript(packageManager, normalizeStaticOutput = true) {
   return [
     "const fs = require('node:fs')",
-    "const path = require('node:path')",
+    ...(normalizeStaticOutput ? ["const path = require('node:path')"] : []),
     "const { spawnSync } = require('node:child_process')",
     "const secretPath = '/run/secrets/deployhub-env'",
     "const variables = fs.existsSync(secretPath) ? JSON.parse(fs.readFileSync(secretPath, 'utf8')) : {}",
     `const result = spawnSync(${JSON.stringify(packageManager)}, ['run', 'build'], { stdio: 'inherit', env: { ...process.env, ...variables } })`,
     'if (result.status !== 0) process.exit(result.status ?? 1)',
+    ...(!normalizeStaticOutput ? [''] : [
     "const findIndexDirectory = (directory, depth = 0) => {",
     "  if (depth > 4 || !fs.existsSync(directory) || !fs.statSync(directory).isDirectory()) return null",
     "  if (fs.existsSync(path.join(directory, 'index.html'))) return directory",
@@ -94,11 +99,11 @@ export function createFrontendBuildScript(packageManager) {
     '  process.exit(1)',
     '}',
     "fs.cpSync(outputDirectory, '.deployhub-output', { recursive: true })",
-    '',
+    '']),
   ].join('\n')
 }
 
-export function createDockerfile(projectType, packageManager = 'npm', containerPort = 31000, hasLockFile = true) {
+export function createDockerfile(projectType, packageManager = 'npm', containerPort = 31000, hasLockFile = true, frontendRuntime = 'static') {
   if (!['npm', 'yarn', 'pnpm'].includes(packageManager)) {
     throw new Error('Package manager must be npm, yarn, or pnpm.')
   }
@@ -117,6 +122,26 @@ export function createDockerfile(projectType, packageManager = 'npm', containerP
   }[packageManager]
   const packageSetup = [...packageFiles, `RUN ${installCommand}`]
   if (projectType === 'frontend') {
+    if (frontendRuntime === 'nextjs') {
+      return [
+        '# syntax=docker/dockerfile:1.7',
+        'FROM node:20-alpine AS build',
+        'WORKDIR /app',
+        ...packageSetup,
+        'COPY . .',
+        'RUN --mount=type=secret,id=deployhub-env,required=false node .deployhub-build.cjs',
+        'FROM node:20-alpine',
+        'WORKDIR /app',
+        'ENV NODE_ENV=production',
+        ...(packageManager === 'npm' ? [] : ['RUN corepack enable']),
+        'COPY --from=build --chown=node:node /app/ ./',
+        'USER node',
+        `ENV PORT=${containerPort}`,
+        `EXPOSE ${containerPort}`,
+        `CMD [${JSON.stringify(packageManager)}, "start"]`,
+        '',
+      ].join('\n')
+    }
     return [
       '# syntax=docker/dockerfile:1.7',
       'FROM node:20-alpine AS build',
@@ -282,7 +307,11 @@ async function runDeployment(deployment) {
     }))
     const packageManager = detectPackageManager(packageJson, lockFiles.filter(Boolean))
     const hasLockFile = lockFiles.some((file) => file === `${packageManager === 'npm' ? 'package' : packageManager}-lock.json` || file === ({ npm: 'npm-shrinkwrap.json', yarn: 'yarn.lock', pnpm: 'pnpm-lock.yaml' })[packageManager])
-    const dockerfile = createDockerfile(projectType, packageManager, containerPort, hasLockFile)
+    const frontendRuntime = projectType === 'frontend' ? detectFrontendRuntime(packageJson) : 'static'
+    if (frontendRuntime === 'nextjs' && !packageJson.scripts?.start) {
+      throw new Error('Next.js frontend projects must define a start script (for example, "next start").')
+    }
+    const dockerfile = createDockerfile(projectType, packageManager, containerPort, hasLockFile, frontendRuntime)
     await writeFile(join(sourceDirectory, 'Dockerfile.deployhub'), dockerfile)
     await writeFile(join(sourceDirectory, '.dockerignore'), '.git\nnode_modules\n.env\n.env.*\nDockerfile.deployhub\n')
     const environmentVariables = decryptEnvironmentVariables(deployment.environmentVariablesEncrypted)
@@ -298,7 +327,7 @@ async function runDeployment(deployment) {
     }
     if (projectType === 'frontend') {
       await writeFile(join(sourceDirectory, '.deployhub-site.conf'), createProjectNginxConfig(containerPort))
-      await writeFile(join(sourceDirectory, '.deployhub-build.cjs'), createFrontendBuildScript(packageManager))
+      await writeFile(join(sourceDirectory, '.deployhub-build.cjs'), createFrontendBuildScript(packageManager, frontendRuntime === 'static'))
     }
     await repository.updateDeploymentStatus(deploymentId, projectId, 'BUILDING')
     await appendLog('Building the project container image.')
@@ -328,7 +357,7 @@ async function runDeployment(deployment) {
       '--label', `deployhub.project=${projectId}`,
       imageName,
     ]
-    if (projectType === 'backend' && runtimeEnvironmentPath) {
+    if ((projectType === 'backend' || frontendRuntime === 'nextjs') && runtimeEnvironmentPath) {
       runArguments.splice(2, 0, '--env-file', runtimeEnvironmentPath)
     }
     const containerIdOutput = await run('docker', runArguments)

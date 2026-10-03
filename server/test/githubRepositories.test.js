@@ -1,6 +1,96 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { fetchGitHubRepositories, findGitHubRepositoryById } from '../src/services/githubRepositoryService.js'
+import { analyzeGitHubRepositoryStack, detectGitHubProjectStack, fetchGitHubRepositories, findGitHubRepositoryById } from '../src/services/githubRepositoryService.js'
+
+test('detects common project stacks and service types from package manifests', () => {
+  assert.deepEqual(detectGitHubProjectStack({ dependencies: { next: '15.0.0', react: '19.0.0' } }), {
+    detected: true,
+    framework: 'Next.js',
+    projectType: 'frontend',
+    runtime: 'node',
+  })
+  assert.deepEqual(detectGitHubProjectStack({ devDependencies: { vite: '6.0.0' }, dependencies: { react: '19.0.0' } }), {
+    detected: true,
+    framework: 'React + Vite',
+    projectType: 'frontend',
+    runtime: 'static',
+  })
+  assert.deepEqual(detectGitHubProjectStack({ dependencies: { express: '5.0.0' } }), {
+    detected: true,
+    framework: 'Express',
+    projectType: 'backend',
+    runtime: 'node',
+  })
+  assert.equal(detectGitHubProjectStack({}).detected, false)
+})
+
+test('analyzes the selected branch package manifest without returning its contents', async () => {
+  const requests = []
+  const fetchImpl = async (url, options) => {
+    const requestUrl = new URL(url)
+    requests.push({ url: requestUrl, options })
+    if (requestUrl.pathname === '/repositories/42') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 42,
+          name: 'deployhub-demo',
+          full_name: 'octocat/deployhub-demo',
+          default_branch: 'main',
+        }),
+      }
+    }
+    if (requestUrl.pathname.endsWith('/commits')) {
+      return {
+        ok: true,
+        json: async () => [{
+          sha: 'abcdef1234567890',
+          html_url: 'https://github.com/octocat/deployhub-demo/commit/abcdef1234567890',
+          commit: { message: 'Add API routes', author: { name: 'Octocat', date: '2026-10-03T10:00:00Z' } },
+          author: { login: 'octocat' },
+        }],
+      }
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        encoding: 'base64',
+        content: Buffer.from(JSON.stringify({ dependencies: { express: '5.0.0' } })).toString('base64'),
+      }),
+    }
+  }
+
+  const stack = await analyzeGitHubRepositoryStack('test-token', 42, 'feature/api', fetchImpl)
+
+  assert.equal(stack.framework, 'Express')
+  assert.equal(stack.projectType, 'backend')
+  assert.equal(stack.branch, 'feature/api')
+  assert.deepEqual(stack.latestCommit, {
+    sha: 'abcdef1234567890',
+    url: 'https://github.com/octocat/deployhub-demo/commit/abcdef1234567890',
+    message: 'Add API routes',
+    author: 'Octocat',
+    authorLogin: 'octocat',
+    date: '2026-10-03T10:00:00Z',
+  })
+  assert.equal('manifest' in stack, false)
+  const manifestRequest = requests.find(({ url }) => url.pathname.endsWith('/contents/package.json'))
+  assert.equal(manifestRequest.url.searchParams.get('ref'), 'feature/api')
+  assert.equal(manifestRequest.options.headers.Authorization, 'Bearer test-token')
+})
+
+test('stack analysis falls back to manual selection when package.json is missing', async () => {
+  const fetchImpl = async (url) => {
+    if (new URL(url).pathname === '/repositories/42') {
+      return { ok: true, json: async () => ({ id: 42, full_name: 'octocat/empty', default_branch: 'main' }) }
+    }
+    return { status: 404, ok: false }
+  }
+
+  const stack = await analyzeGitHubRepositoryStack('test-token', 42, 'main', fetchImpl)
+  assert.equal(stack.detected, false)
+  assert.equal(stack.projectType, null)
+})
 
 test('fetches and maps all pages of authenticated GitHub repositories', async () => {
   const requests = []
@@ -47,17 +137,17 @@ test('fetches and maps all pages of authenticated GitHub repositories', async ()
 })
 
 test('repository lookup only returns repositories available to the authenticated account', async () => {
-  const fetchImpl = async () => ({
+  const fetchImpl = async (url) => new URL(url).pathname === '/repositories/42' ? ({
     ok: true,
-    json: async () => [{
+    json: async () => ({
       id: 42,
       name: 'deployhub-demo',
       full_name: 'octocat/deployhub-demo',
       html_url: 'https://github.com/octocat/deployhub-demo',
       default_branch: 'main',
       owner: { login: 'octocat' },
-    }],
-  })
+    }),
+  }) : ({ status: 404, ok: false })
 
   const repository = await findGitHubRepositoryById('test-token', 42, fetchImpl)
   assert.equal(repository.fullName, 'octocat/deployhub-demo')
