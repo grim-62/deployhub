@@ -1,5 +1,8 @@
 import { env } from '../config/env.js'
+import { findPublicUserById } from '../models/userModel.js'
+import { isAdminGitHubUser } from '../services/adminAccess.js'
 import { AppError } from '../utils/AppError.js'
+import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendError } from '../utils/responses.js'
 
 export function requireAuth(request, response, next) {
@@ -24,3 +27,16 @@ export function errorHandler(error, request, response, next) {
   if (statusCode >= 500) console.error(error)
   return sendError(response, statusCode, code, message)
 }
+
+export const requireAdmin = asyncHandler(async (request, response, next) => {
+  if (!request.session?.userId) {
+    throw new AppError(401, 'UNAUTHORIZED', 'Authentication required')
+  }
+  const user = await findPublicUserById(request.session.userId)
+  if (!user) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required')
+  if (!isAdminGitHubUser(user.githubUsername)) {
+    throw new AppError(403, 'ADMIN_ACCESS_REQUIRED', 'Administrator access required.')
+  }
+  request.adminUser = user
+  return next()
+})

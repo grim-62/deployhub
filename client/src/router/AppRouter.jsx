@@ -11,6 +11,8 @@ import ProjectConfigurationPage from '../pages/ProjectConfigurationPage.jsx'
 import ProjectDetailsPage from '../pages/ProjectDetailsPage.jsx'
 import DeploymentDetailsPage from '../pages/DeploymentDetailsPage.jsx'
 import Dashboard from '../pages/Dashboard.jsx'
+import AdminProjectsPage from '../pages/AdminProjectsPage.jsx'
+import AdminProjectDetailsPage from '../pages/AdminProjectDetailsPage.jsx'
 
 function SessionGate({ guestOnly = false, children }) {
   const { status, error, retry } = useAuth()
@@ -35,6 +37,8 @@ function ApplicationRoutes() {
     <Route path="/projects/new" element={page(<GitHubRepositoriesPage />)} />
     <Route path="/projects/new/configure" element={page(<ProjectConfigurationPage onNotify={notify} />)} />
     <Route path="/projects/:id" element={page(<ProjectDetailsPage onNotify={notify} />)} />
+    <Route path="/admin/projects" element={page(<AdminProjectsPage />)} />
+    <Route path="/admin/projects/:id" element={page(<AdminProjectDetailsPage onNotify={notify} />)} />
     <Route path="/deployments/:id" element={page(<DeploymentDetailsPage />)} />
     <Route path="/deployments" element={page(<DeploymentsPage query={query} />)} />
     <Route path="/activity" element={page(<ActivityPage query={query} />)} />

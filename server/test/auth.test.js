@@ -114,3 +114,15 @@ test('unknown API routes use the standard error envelope', async () => {
   assert.equal(payload.error.code, 'NOT_FOUND')
   assert.equal(typeof payload.error.message, 'string')
 })
+
+test('admin APIs reject requests without an authenticated session', async () => {
+  const listResponse = await fetch(`${baseUrl}/api/admin/projects/live`)
+  assert.equal(listResponse.status, 401)
+  assert.equal((await listResponse.json()).error.code, 'UNAUTHORIZED')
+
+  const detailResponse = await fetch(`${baseUrl}/api/admin/projects/1`)
+  assert.equal(detailResponse.status, 401)
+
+  const deleteResponse = await fetch(`${baseUrl}/api/admin/projects/1`, { method: 'DELETE' })
+  assert.equal(deleteResponse.status, 401)
+})

@@ -6,6 +6,7 @@ import { env } from './config/env.js'
 import { database } from './config/database.js'
 import { errorHandler, notFound } from './middleware/errorHandler.js'
 import authRoutes from './routes/authRoutes.js'
+import adminRoutes from './routes/admin.routes.js'
 import dashboardRoutes from './routes/dashboard.routes.js'
 import githubRoutes from './routes/github.routes.js'
 import healthRoutes from './routes/healthRoutes.js'
@@ -34,6 +35,7 @@ app.use(session({
 }))
 app.use('/api', healthRoutes)
 app.use('/api/auth', authRoutes)
+app.use('/api/admin', adminRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/github', githubRoutes)
 app.use('/api', workspaceRoutes)

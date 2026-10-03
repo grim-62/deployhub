@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { env } from '../config/env.js'
 import { findPublicUserById, upsertGitHubUser } from '../models/userModel.js'
+import { isAdminGitHubUser } from '../services/adminAccess.js'
 import { createGitHubAuthorizationUrl, exchangeCodeForGitHubUser, isGitHubOAuthConfigured } from '../services/githubOAuthService.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess } from '../utils/responses.js'
@@ -66,7 +67,7 @@ export const currentUser = asyncHandler(async (request, response) => {
     request.session.destroy(() => {})
     return response.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } })
   }
-  return sendSuccess(response, { user })
+  return sendSuccess(response, { user: { ...user, isAdmin: isAdminGitHubUser(user.githubUsername) } })
 })
 
 export function logout(request, response, next) {

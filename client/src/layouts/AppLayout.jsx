@@ -42,9 +42,12 @@ export default function AppLayout({
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const current = primaryLinks.find(
+  const navigationLinks = user.isAdmin
+    ? [...primaryLinks, { to: "/admin/projects", label: "Admin", icon: ShieldCheck }]
+    : primaryLinks;
+  const current = navigationLinks.find(
     (link) => link.to === location.pathname,
-  ) || (location.pathname.startsWith("/projects/new") ? { label: "Add Project" } : location.pathname.startsWith("/projects/") ? { label: "Project" } : location.pathname.startsWith("/deployments/") ? { label: "Deployment" } : { label: "Settings" });
+  ) || (location.pathname.startsWith("/admin/") ? { label: "Admin" } : location.pathname.startsWith("/projects/new") ? { label: "Add Project" } : location.pathname.startsWith("/projects/") ? { label: "Project" } : location.pathname.startsWith("/deployments/") ? { label: "Deployment" } : { label: "Settings" });
   const online = Boolean(health.data) && !health.error;
   const handleLogout = async () => {
     try {
@@ -75,7 +78,7 @@ export default function AppLayout({
       </div>
       <p className="side-label">Workspace</p>
       <nav className="nav-list" aria-label="Main navigation">
-        {primaryLinks.map(({ to, label, icon: Icon }) => (
+        {navigationLinks.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

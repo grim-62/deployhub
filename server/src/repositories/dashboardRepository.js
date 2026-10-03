@@ -65,6 +65,48 @@ export async function listProjects(userId) {
   return result.rows
 }
 
+export async function listAdminLiveProjects() {
+  const result = await getDatabase().query(
+    `SELECT p.id, p.name, p.repository_full_name AS "repositoryFullName",
+       p.branch, p.project_type AS "projectType", p.status,
+       p.production_url AS "productionUrl", p.updated_at AS "updatedAt",
+       u.github_username AS "ownerGithubUsername"
+     FROM projects p
+     JOIN users u ON u.id = p.user_id
+     WHERE UPPER(p.status) = 'LIVE'
+     ORDER BY p.updated_at DESC, p.id DESC`,
+  )
+  return result.rows
+}
+
+export async function getAdminProjectDetails(projectId) {
+  const projectResult = await getDatabase().query(
+    `SELECT p.id, p.user_id AS "ownerId", p.name,
+       p.repository_full_name AS "repositoryFullName", p.repository_url AS "repositoryUrl",
+       p.branch, p.project_type AS "projectType", p.status,
+       p.production_url AS "productionUrl", p.created_at AS "createdAt",
+       p.updated_at AS "updatedAt", u.github_username AS "ownerGithubUsername"
+     FROM projects p
+     JOIN users u ON u.id = p.user_id
+     WHERE p.id = $1 AND UPPER(p.status) = 'LIVE'`,
+    [projectId],
+  )
+  const project = projectResult.rows[0]
+  if (!project) return null
+
+  const deploymentsResult = await getDatabase().query(
+    `SELECT id, branch, status, commit_sha AS "commitSha",
+       deployment_url AS "deploymentUrl", duration,
+       created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM deployments
+     WHERE project_id = $1 AND user_id = $2
+     ORDER BY created_at DESC, id DESC
+     LIMIT 20`,
+    [projectId, project.ownerId],
+  )
+  return { project, deployments: deploymentsResult.rows }
+}
+
 export async function createProject(userId, { repository, projectType, branch, environmentVariablesEncrypted }) {
   const result = await getDatabase().query(
     `INSERT INTO projects

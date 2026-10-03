@@ -36,6 +36,7 @@ export const env = Object.freeze({
   deploymentDockerNetwork: process.env.DEPLOYMENT_DOCKER_NETWORK || 'deployhub_default',
   deploymentNginxContainer: process.env.DEPLOYMENT_NGINX_CONTAINER || 'deployhub-nginx',
   deploymentNginxConfigDir: process.env.DEPLOYMENT_NGINX_CONFIG_DIR || '/deployment-nginx',
+  adminGitHubUsers: (process.env.ADMIN_GITHUB_USERS || '').split(',').map((username) => username.trim().toLowerCase()).filter(Boolean),
   sessionSecret: process.env.SESSION_SECRET || randomBytes(48).toString('hex'),
   sessionSecretConfigured,
   sessionCookieName: 'deployhub.sid',

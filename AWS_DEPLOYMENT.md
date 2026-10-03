@@ -154,9 +154,12 @@ DEPLOYMENT_DOMAIN=deployhub.prashantxd.in
 DEPLOYMENT_PROTOCOL=https
 DEPLOYMENT_ENCRYPTION_KEY=REPLACE_WITH_THIRD_HEX_OUTPUT
 TLS_CERT_DIR=./certs
+ADMIN_GITHUB_USERS=YOUR_GITHUB_USERNAME
 ```
 
 Save in nano with `Ctrl+O`, Enter, then `Ctrl+X`. The `.env` file is ignored by Git. Do not commit it or paste its contents into chat or tickets.
+
+Set `ADMIN_GITHUB_USERS` to your GitHub username without `@`. For multiple admins, use comma-separated usernames. Only signed-in allowlisted users can access the admin page or its APIs. Restart the server after changing this value.
 
 `DATABASE_URL` uses `localhost` in the shared file for running the API directly during local development. Docker Compose overrides it inside the server container to use the private `postgres` service hostname; do not change the `.env` value to `postgres` for this single-file setup.
 
